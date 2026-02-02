@@ -15,7 +15,11 @@ class Settings(BaseSettings):
     latency_site_list: float = 0.008  # 8ms
     latency_site_single: float = 0.004  # 4ms
     latency_site_batch: float = 0.006  # 6ms
-    
+
+    # Cross-service URLs for dashboard
+    robot_service_url: str = "http://rest-robot-service:8001"
+    user_service_url: str = "http://rest-user-service:8000"
+
     cors_origins: list[str] = ["*"]
     
     class Config:

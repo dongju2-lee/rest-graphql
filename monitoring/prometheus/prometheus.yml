@@ -29,7 +29,12 @@ scrape_configs:
       - targets: ['apollo-router:9090']
     metrics_path: '/metrics'
 
-  # Node Exporter (if needed for host metrics)
-  # - job_name: 'node-exporter'
-  #   static_configs:
-  #     - targets: ['node-exporter:9100']
+  # Locust GraphQL load test metrics
+  - job_name: 'locust-graphql'
+    static_configs:
+      - targets: ['locust-graphql:9646']
+
+  # Locust REST load test metrics
+  - job_name: 'locust-rest'
+    static_configs:
+      - targets: ['locust-rest:9646']

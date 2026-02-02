@@ -7,6 +7,7 @@ import strawberry
 class Mutation:
     """Site service mutations (placeholder)"""
     
-    @strawberry.field(description="Placeholder mutation")
-    async def placeholder(self) -> bool:
+    @strawberry.field(description="Placeholder mutation for site service")
+    async def site_placeholder(self) -> bool:
+        """Placeholder for future site mutations"""
         return True

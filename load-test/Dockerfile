@@ -7,7 +7,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY *.py /app/
 
-EXPOSE 8089
+EXPOSE 8089 9646
 
 # Default command (can be overridden)
 CMD ["locust", "--host=http://localhost:14000"]

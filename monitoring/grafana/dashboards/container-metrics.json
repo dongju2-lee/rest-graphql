@@ -1,46 +1,298 @@
 {
-  "dashboard": {
-    "title": "Container Metrics - REST vs GraphQL",
-    "tags": ["docker", "containers", "performance"],
-    "timezone": "browser",
-    "panels": [
-      {
-        "title": "CPU Usage by Container",
-        "type": "graph",
-        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
-        "targets": [
-          {
-            "expr": "rate(container_cpu_usage_seconds_total{name=~\".*-service|.*-gateway|.*-router\"}[1m]) * 100",
-            "legendFormat": "{{name}}"
-          }
-        ]
+  "uid": "container-metrics",
+  "title": "REST vs GraphQL - Performance Dashboard",
+  "tags": ["docker", "containers", "performance", "rest", "graphql", "locust"],
+  "timezone": "browser",
+  "schemaVersion": 38,
+  "version": 2,
+  "refresh": "5s",
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "annotations": {
+    "list": []
+  },
+  "templating": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 100,
+      "title": "Load Test - RPS (Requests/sec)",
+      "type": "timeseries",
+      "gridPos": {"h": 7, "w": 8, "x": 0, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {
+          "expr": "rate(locust_requests_total{job=\"locust-rest\"}[30s])",
+          "legendFormat": "REST",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(locust_requests_total{job=\"locust-graphql\"}[30s])",
+          "legendFormat": "GraphQL",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "min": 0,
+          "custom": {"drawStyle": "line", "lineWidth": 2, "fillOpacity": 20}
+        }
       },
-      {
-        "title": "Memory Usage by Container",
-        "type": "graph",
-        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
-        "targets": [
-          {
-            "expr": "container_memory_usage_bytes{name=~\".*-service|.*-gateway|.*-router\"} / 1024 / 1024",
-            "legendFormat": "{{name}}"
-          }
-        ]
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}}
+    },
+    {
+      "id": 101,
+      "title": "Load Test - Response Time (p50)",
+      "type": "timeseries",
+      "gridPos": {"h": 7, "w": 8, "x": 8, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.5, sum(rate(locust_response_times_bucket{job=\"locust-rest\"}[30s])) by (le))",
+          "legendFormat": "REST p50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.5, sum(rate(locust_response_times_bucket{job=\"locust-graphql\"}[30s])) by (le))",
+          "legendFormat": "GraphQL p50",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "min": 0,
+          "custom": {"drawStyle": "line", "lineWidth": 2, "fillOpacity": 20}
+        }
       },
-      {
-        "title": "Network I/O",
-        "type": "graph",
-        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 8},
-        "targets": [
-          {
-            "expr": "rate(container_network_receive_bytes_total{name=~\".*-service|.*-gateway|.*-router\"}[1m])",
-            "legendFormat": "{{name}} - RX"
-          },
-          {
-            "expr": "rate(container_network_transmit_bytes_total{name=~\".*-service|.*-gateway|.*-router\"}[1m])",
-            "legendFormat": "{{name}} - TX"
-          }
-        ]
-      }
-    ]
-  }
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}}
+    },
+    {
+      "id": 102,
+      "title": "Load Test - Active Users",
+      "type": "timeseries",
+      "gridPos": {"h": 7, "w": 8, "x": 16, "y": 0},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {
+          "expr": "locust_users{job=\"locust-rest\"}",
+          "legendFormat": "REST Users",
+          "refId": "A"
+        },
+        {
+          "expr": "locust_users{job=\"locust-graphql\"}",
+          "legendFormat": "GraphQL Users",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {"drawStyle": "line", "lineWidth": 2, "fillOpacity": 20}
+        }
+      },
+      "options": {"legend": {"displayMode": "list", "placement": "bottom"}}
+    },
+    {
+      "id": 1,
+      "title": "REST - CPU Usage %",
+      "type": "timeseries",
+      "gridPos": {"h": 7, "w": 12, "x": 0, "y": 7},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {
+          "expr": "rate(container_cpu_usage_seconds_total{name=~\"rest-.*|nginx-gateway\"}[1m]) * 100",
+          "legendFormat": "{{name}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "custom": {"drawStyle": "line", "lineWidth": 2, "fillOpacity": 20}
+        }
+      },
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}}
+    },
+    {
+      "id": 2,
+      "title": "GraphQL - CPU Usage %",
+      "type": "timeseries",
+      "gridPos": {"h": 7, "w": 12, "x": 12, "y": 7},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {
+          "expr": "rate(container_cpu_usage_seconds_total{name=~\"graphql-.*|apollo-router\"}[1m]) * 100",
+          "legendFormat": "{{name}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "custom": {"drawStyle": "line", "lineWidth": 2, "fillOpacity": 20}
+        }
+      },
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}}
+    },
+    {
+      "id": 3,
+      "title": "REST - Memory Usage (MB)",
+      "type": "timeseries",
+      "gridPos": {"h": 7, "w": 12, "x": 0, "y": 14},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {
+          "expr": "container_memory_usage_bytes{name=~\"rest-.*|nginx-gateway\"} / 1024 / 1024",
+          "legendFormat": "{{name}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decmbytes",
+          "min": 0,
+          "custom": {"drawStyle": "line", "lineWidth": 2, "fillOpacity": 20}
+        }
+      },
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}}
+    },
+    {
+      "id": 4,
+      "title": "GraphQL - Memory Usage (MB)",
+      "type": "timeseries",
+      "gridPos": {"h": 7, "w": 12, "x": 12, "y": 14},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {
+          "expr": "container_memory_usage_bytes{name=~\"graphql-.*|apollo-router\"} / 1024 / 1024",
+          "legendFormat": "{{name}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decmbytes",
+          "min": 0,
+          "custom": {"drawStyle": "line", "lineWidth": 2, "fillOpacity": 20}
+        }
+      },
+      "options": {"legend": {"displayMode": "table", "placement": "bottom"}}
+    },
+    {
+      "id": 5,
+      "title": "Total CPU: REST vs GraphQL",
+      "type": "timeseries",
+      "gridPos": {"h": 7, "w": 12, "x": 0, "y": 21},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {
+          "expr": "sum(rate(container_cpu_usage_seconds_total{name=~\"rest-.*|nginx-gateway\"}[1m])) * 100",
+          "legendFormat": "REST Total",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(container_cpu_usage_seconds_total{name=~\"graphql-.*|apollo-router\"}[1m])) * 100",
+          "legendFormat": "GraphQL Total",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "min": 0,
+          "custom": {"drawStyle": "line", "lineWidth": 3, "fillOpacity": 30}
+        }
+      },
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"]}}
+    },
+    {
+      "id": 6,
+      "title": "Total Memory: REST vs GraphQL",
+      "type": "timeseries",
+      "gridPos": {"h": 7, "w": 12, "x": 12, "y": 21},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {
+          "expr": "sum(container_memory_usage_bytes{name=~\"rest-.*|nginx-gateway\"}) / 1024 / 1024",
+          "legendFormat": "REST Total",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(container_memory_usage_bytes{name=~\"graphql-.*|apollo-router\"}) / 1024 / 1024",
+          "legendFormat": "GraphQL Total",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "decmbytes",
+          "min": 0,
+          "custom": {"drawStyle": "line", "lineWidth": 3, "fillOpacity": 30}
+        }
+      },
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"]}}
+    },
+    {
+      "id": 7,
+      "title": "Network Receive: REST vs GraphQL",
+      "type": "timeseries",
+      "gridPos": {"h": 7, "w": 12, "x": 0, "y": 28},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {
+          "expr": "sum(rate(container_network_receive_bytes_total{name=~\"rest-.*|nginx-gateway\"}[1m]))",
+          "legendFormat": "REST Receive",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(container_network_receive_bytes_total{name=~\"graphql-.*|apollo-router\"}[1m]))",
+          "legendFormat": "GraphQL Receive",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "min": 0,
+          "custom": {"drawStyle": "line", "lineWidth": 3, "fillOpacity": 30}
+        }
+      },
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"]}}
+    },
+    {
+      "id": 8,
+      "title": "Network Transmit: REST vs GraphQL",
+      "type": "timeseries",
+      "gridPos": {"h": 7, "w": 12, "x": 12, "y": 28},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {
+          "expr": "sum(rate(container_network_transmit_bytes_total{name=~\"rest-.*|nginx-gateway\"}[1m]))",
+          "legendFormat": "REST Transmit",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(rate(container_network_transmit_bytes_total{name=~\"graphql-.*|apollo-router\"}[1m]))",
+          "legendFormat": "GraphQL Transmit",
+          "refId": "B"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps",
+          "min": 0,
+          "custom": {"drawStyle": "line", "lineWidth": 3, "fillOpacity": 30}
+        }
+      },
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"]}}
+    }
+  ]
 }

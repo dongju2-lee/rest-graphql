@@ -95,6 +95,7 @@ services:
     container_name: apollo-router
     ports:
       - "14000:4000" # GraphQL endpoint
+      - "18088:8088" # Health check
       - "19090:9090" # Metrics
     depends_on:
       graphql-user-service: { condition: service_healthy }
@@ -105,8 +106,8 @@ services:
       - monitoring-network
     deploy:
       resources:
-        limits: { cpus: "0.5", memory: 512M }
-        reservations: { cpus: "0.25", memory: 256M }
+        limits: { cpus: "1.0", memory: 1G }
+        reservations: { cpus: "0.5", memory: 512M }
 
   # ============================================
   # REST Services (4 containers)
@@ -116,6 +117,8 @@ services:
     build:
       context: ./backend/rest/services/user-service
     container_name: rest-user-service
+    ports:
+      - "28000:8000"  # Swagger: http://localhost:28000/docs
     networks:
       - rest-network
     deploy:
@@ -138,6 +141,8 @@ services:
     build:
       context: ./backend/rest/services/robot-service
     container_name: rest-robot-service
+    ports:
+      - "28001:8001"  # Swagger: http://localhost:28001/docs
     depends_on:
       - rest-user-service
     networks:
@@ -162,6 +167,8 @@ services:
     build:
       context: ./backend/rest/services/site-service
     container_name: rest-site-service
+    ports:
+      - "28002:8002"  # Swagger: http://localhost:28002/docs
     networks:
       - rest-network
     deploy:
@@ -252,9 +259,14 @@ services:
     volumes:
       - /:/rootfs:ro
       - /var/run:/var/run:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
       - /sys:/sys:ro
       - /var/lib/docker/:/var/lib/docker:ro
     privileged: true
+    command:
+      - '--docker_only=true'
+      - '--housekeeping_interval=10s'
+      - '--store_container_labels=true'
     networks:
       - monitoring-network
     deploy:

@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     latency_robot_list: float = 0.015  # 15ms
     latency_robot_single: float = 0.007  # 7ms
     latency_robot_batch: float = 0.010  # 10ms
+    latency_telemetry_single: float = 0.003  # 3ms
+    latency_telemetry_batch: float = 0.005  # 5ms
     
     # CORS
     cors_origins: list[str] = ["*"]

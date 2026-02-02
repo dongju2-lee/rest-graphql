@@ -1,5 +1,3 @@
-version: "3.8"
-
 # Load Testing Stack
 # - Locust (load testing tool)
 
@@ -11,11 +9,15 @@ services:
       dockerfile: Dockerfile
     container_name: locust-graphql
     ports:
-      - "48089:8089"
+      - "48089:8089"   # Web UI
+      - "49646:9646"   # Prometheus metrics
     volumes:
       - ./locustfile_graphql.py:/app/locustfile.py:ro
+      - ./prometheus_exporter.py:/app/prometheus_exporter.py:ro
     command:
-      ["locust", "--host=http://apollo-router:4000", "--web-host=0.0.0.0"]
+      - "locust"
+      - "--host=http://apollo-router:4000"
+      - "--web-host=0.0.0.0"
     networks:
       - graphql-network
       - monitoring-network
@@ -32,10 +34,15 @@ services:
       dockerfile: Dockerfile
     container_name: locust-rest
     ports:
-      - "58089:8089"
+      - "58089:8089"   # Web UI
+      - "59646:9646"   # Prometheus metrics
     volumes:
       - ./locustfile_rest.py:/app/locustfile.py:ro
-    command: ["locust", "--host=http://nginx-gateway:80", "--web-host=0.0.0.0"]
+      - ./prometheus_exporter.py:/app/prometheus_exporter.py:ro
+    command:
+      - "locust"
+      - "--host=http://nginx-gateway:80"
+      - "--web-host=0.0.0.0"
     networks:
       - rest-network
       - monitoring-network

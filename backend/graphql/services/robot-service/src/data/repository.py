@@ -17,9 +17,11 @@ class RobotRepository:
     
     def _init_data(self):
         """Initialize in-memory data"""
+        random.seed(100)  # Fixed seed for consistent data between REST and GraphQL
+
         statuses = ["active", "idle", "maintenance", "offline"]
         models = ["Model-X1", "Model-X2", "Model-Y1", "Model-Z1"]
-        
+
         self.robots = [
             {
                 "id": i,
@@ -34,6 +36,8 @@ class RobotRepository:
             }
             for i in range(1, self.settings.num_robots + 1)
         ]
+
+        random.seed()  # Reset seed
     
     async def get_all(self) -> List[dict]:
         """Get all robots"""
@@ -67,3 +71,46 @@ class RobotRepository:
     def get_count(self) -> int:
         """Get total robot count"""
         return len(self.robots)
+
+
+class TelemetryRepository:
+    """Telemetry repository for data access - same logic as REST"""
+
+    def __init__(self):
+        self.settings = get_settings()
+        self._init_data()
+
+    def _init_data(self):
+        """Initialize in-memory telemetry data (1 record per robot)"""
+        random.seed(42)  # Fixed seed for consistent data between REST and GraphQL
+
+        self.telemetry = [
+            {
+                "robot_id": i,
+                "cpu": round(random.uniform(10, 95), 1),
+                "memory": round(random.uniform(20, 90), 1),
+                "disk": round(random.uniform(30, 85), 1),
+                "temperature": round(random.uniform(25, 65), 1),
+                "error_count": random.randint(0, 10),
+                "timestamp": (datetime.now() - timedelta(minutes=random.randint(1, 60))).isoformat()
+            }
+            for i in range(1, self.settings.num_robots + 1)
+        ]
+
+        random.seed()  # Reset seed
+
+    async def get_by_robot_id(self, robot_id: int) -> Optional[dict]:
+        """Get telemetry for a single robot"""
+        await asyncio.sleep(self.settings.latency_telemetry_single)
+        telemetry = next((t for t in self.telemetry if t["robot_id"] == robot_id), None)
+        return telemetry.copy() if telemetry else None
+
+    async def get_by_robot_ids(self, robot_ids: List[int]) -> List[dict]:
+        """Get telemetry for multiple robots (batch operation for DataLoader)"""
+        await asyncio.sleep(self.settings.latency_telemetry_batch + (len(robot_ids) * 0.0001))
+        return [t.copy() for t in self.telemetry if t["robot_id"] in robot_ids]
+
+    async def get_all(self) -> List[dict]:
+        """Get all telemetry data"""
+        await asyncio.sleep(self.settings.latency_telemetry_batch)
+        return [t.copy() for t in self.telemetry]

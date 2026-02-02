@@ -1,87 +1,113 @@
 """
 Locust load test for REST API (NGINX Gateway)
+
+Test scenarios for REST vs GraphQL performance comparison.
+Run with: locust -f locustfile_rest.py --host=http://localhost:24000
 """
 
 from locust import HttpUser, task, between
 import random
 
+import prometheus_exporter  # noqa: F401
+
 
 class RestUser(HttpUser):
     """Load test user for REST API"""
-    
+
     wait_time = between(0.1, 0.5)
     host = "http://localhost:24000"  # NGINX Gateway
-    
+
+    # ============== API-1: Simple Query (Over-fetching test) ==============
+
     @task(3)
     def get_all_users(self):
         """
         Scenario 1: Simple query
         REST disadvantage: Over-fetching (returns all fields)
         """
-        self.client.get("/api/users", name="REST: Get all users")
-    
+        self.client.get("/api/users", name="API-1: Get users (all fields)")
+
+    # ============== API-2: Cross-Service Join ==============
+
     @task(2)
-    def get_user_with_robots_naive(self):
+    def get_user_with_robots(self):
         """
-        Scenario 2: Cross-service join (Naive approach)
-        REST disadvantage: Multiple sequential requests (N+1)
+        Scenario 2: Cross-service join
+        REST disadvantage: Multiple sequential requests
         """
         user_id = random.randint(1, 100)
-        
+
         # 1. Get user
-        user_response = self.client.get(f"/api/users/{user_id}", name="REST: Get user")
-        
-        if user_response.status_code == 200:
-            # 2. Get user's robots (requires knowing owner_id)
-            self.client.get(f"/api/robots/by-owner/{user_id}", name="REST: Get robots by owner")
-    
+        self.client.get(f"/api/users/{user_id}", name="API-2a: Get user")
+
+        # 2. Get user's robots
+        self.client.get(f"/api/robots/by-owner/{user_id}", name="API-2b: Get robots by owner")
+
+    # ============== API-3: N+1 Problem Test ==============
+
     @task(1)
-    def get_users_with_robots_n_plus_1(self):
+    def get_robots_with_telemetry(self):
         """
-        Scenario 3: N+1 problem (worst case for REST)
-        REST disadvantage: 1 + N queries (1 for users, N for each user's robots)
+        Scenario 3: N+1 problem test with telemetry
+        REST approach: Batch endpoint for optimization
+        GraphQL equivalent: robots { id name status telemetry { cpu memory temperature } }
         """
-        # 1. Get all users
-        users_response = self.client.get("/api/users", name="REST: Get all users (N+1)")
-        
-        if users_response.status_code == 200:
-            users = users_response.json()
-            # Limit to first 10 for testing (otherwise too many requests)
-            for user in users[:10]:
-                # 2-N. Get robots for each user
+        # Get all robots
+        robots_response = self.client.get("/api/robots", name="API-3a: Get robots")
+
+        if robots_response.status_code == 200:
+            robots = robots_response.json()
+            robot_ids = [str(r["id"]) for r in robots]
+
+            if robot_ids:
+                # Batch telemetry call for ALL robots (same as GraphQL)
                 self.client.get(
-                    f"/api/robots/by-owner/{user['id']}", 
-                    name="REST: Get robots for each user (N+1)"
+                    f"/api/telemetry/batch?ids={','.join(robot_ids)}",
+                    name="API-3b: Batch telemetry (all)"
                 )
-    
+
+    # ============== API-4: Complex Aggregation (Dashboard) ==============
+
     @task(1)
-    def complex_aggregation_multiple_calls(self):
+    def site_dashboard(self):
         """
-        Scenario 4: Complex aggregation (multiple REST calls)
-        REST disadvantage: Multiple sequential requests, client-side coordination
+        Scenario 4: Complex aggregation (Site Dashboard)
+        REST approach: Single optimized endpoint with internal orchestration
         """
         site_id = random.randint(1, 5)
-        
-        # 1. Get site
-        self.client.get(f"/api/sites/{site_id}", name="REST: Get site")
-        
-        # 2. Get users by site
-        users_response = self.client.get(
-            f"/api/users/by-site/{site_id}", 
-            name="REST: Get users by site"
-        )
-        
-        # 3. Get robots by site
         self.client.get(
-            f"/api/robots/by-site/{site_id}", 
-            name="REST: Get robots by site"
+            f"/api/sites/{site_id}/dashboard",
+            name="API-4: Site dashboard"
         )
-        
-        # 4. For each user, get their robots (simplified - just first 5)
-        if users_response.status_code == 200:
-            users = users_response.json()
-            for user in users[:5]:
-                self.client.get(
-                    f"/api/robots/by-owner/{user['id']}", 
-                    name="REST: Get robots per user"
-                )
+
+    # ============== Additional Scenarios ==============
+
+    @task(1)
+    def get_single_robot_detail(self):
+        """
+        Single robot with all relations (cross-service)
+        GraphQL equivalent: robot { id name model status battery owner { name email } site { name location } telemetry { cpu memory disk temperature } }
+        REST requires 3 calls to get same data
+        """
+        robot_id = random.randint(1, 500)
+
+        # 1. Get robot + owner
+        robot_response = self.client.get(
+            f"/api/robots/{robot_id}/with-owner",
+            name="Robot detail: robot+owner"
+        )
+
+        # 2. Get telemetry
+        self.client.get(
+            f"/api/telemetry/{robot_id}",
+            name="Robot detail: telemetry"
+        )
+
+        # 3. Get site (site_id is in robot response)
+        if robot_response.status_code == 200:
+            site_id = robot_response.json().get("site_id", 1)
+            self.client.get(
+                f"/api/sites/{site_id}",
+                name="Robot detail: site"
+            )
+

@@ -1,20 +1,20 @@
 # Supergraph configuration for rover CLI
 # Used to compose the supergraph schema from subgraphs
 
-federation_version: =2.7.1
+federation_version: =2.11.1
 
 subgraphs:
   user-service:
-    routing_url: http://user-service:8000/graphql
+    routing_url: http://graphql-user-service:8000/graphql
     schema:
-      subgraph_url: http://user-service:8000/graphql
-  
+      subgraph_url: http://graphql-user-service:8000/graphql
+
   robot-service:
-    routing_url: http://robot-service:8001/graphql
+    routing_url: http://graphql-robot-service:8001/graphql
     schema:
-      subgraph_url: http://robot-service:8001/graphql
-  
+      subgraph_url: http://graphql-robot-service:8001/graphql
+
   site-service:
-    routing_url: http://site-service:8002/graphql
+    routing_url: http://graphql-site-service:8002/graphql
     schema:
-      subgraph_url: http://site-service:8002/graphql
+      subgraph_url: http://graphql-site-service:8002/graphql

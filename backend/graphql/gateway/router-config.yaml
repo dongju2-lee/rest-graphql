@@ -1,21 +1,17 @@
-# Apollo Router 4.x Configuration for Robot Monitoring System
+# Apollo Router Configuration for Robot Monitoring System
 
 # Server configuration
 supergraph:
   listen: 0.0.0.0:4000
   introspection: true
+  query_planning:
+    cache:
+      in_memory:
+        limit: 512
 
-# CORS configuration
+# CORS configuration (allow all origins)
 cors:
-  origins:
-    - "*"
-  allow_credentials: true
-  allow_headers:
-    - "*"
-  allow_methods:
-    - GET
-    - POST
-    - OPTIONS
+  allow_any_origin: true
 
 # Health check
 health_check:
@@ -30,36 +26,3 @@ telemetry:
         enabled: true
         listen: 0.0.0.0:9090
         path: /metrics
-  instrumentation:
-    spans:
-      mode: spec_compliant
-
-# Apollo Studio (disabled for local development)
-apollo:
-  telemetry:
-    disabled: true
-
-# Performance optimizations
-traffic_shaping:
-  router:
-    timeout: 30s
-  all:
-    timeout: 10s
-    deduplicate_query: true
-    compression: br
-
-# Query planning
-supergraph:
-  query_planning:
-    cache:
-      in_memory:
-        limit: 512
-
-# Logging
-logging:
-  common:
-    level: info
-  experimental_when_header:
-    - name: "x-debug"
-      value: "true"
-      level: debug
