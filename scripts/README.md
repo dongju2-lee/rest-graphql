@@ -72,6 +72,90 @@
 
 **핵심:** 동일한 데이터를 가져오지만 REST는 더 많은 HTTP 호출 필요
 
+### API 서비스 의존성
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                              서비스 구조                                      │
+├─────────────────────────────────────────────────────────────────────────────┤
+│                                                                             │
+│   [Client/Locust]                                                           │
+│         │                                                                   │
+│         ├──────────────────────┬────────────────────────────────────────    │
+│         ▼                      ▼                                            │
+│   ┌──────────────┐      ┌──────────────┐                                    │
+│   │ NGINX Gateway│      │ Apollo Router│                                    │
+│   │  (REST)      │      │  (GraphQL)   │                                    │
+│   └──────┬───────┘      └──────┬───────┘                                    │
+│          │                     │                                            │
+│          ▼                     ▼                                            │
+│   ┌────────────┐        ┌────────────┐                                      │
+│   │user-service│        │user-service│                                      │
+│   │robot-service│       │robot-service│  ◄── Federation으로 자동 연결        │
+│   │site-service│        │site-service│                                      │
+│   └────────────┘        └────────────┘                                      │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+```
+
+#### API별 호출 흐름
+
+**API-1: 사용자 목록**
+```
+REST:     Client → NGINX → user-service                    [1 call]
+GraphQL:  Client → Apollo → user-service                   [1 query]
+```
+
+**API-2: 사용자 + 로봇**
+```
+REST:     Client → NGINX → user-service                    [call 1]
+                 → NGINX → robot-service                   [call 2]
+
+GraphQL:  Client → Apollo → user-service ─┐                [1 query]
+                          → robot-service ◄┘ (Federation)
+```
+
+**API-3: 로봇 + Telemetry**
+```
+REST:     Client → NGINX → robot-service (robots)          [call 1]
+                 → NGINX → robot-service (telemetry batch) [call 2]
+
+GraphQL:  Client → Apollo → robot-service ─┐               [1 query]
+                            (DataLoader)  ◄┘ (batched)
+```
+
+**API-4: 사이트 대시보드**
+```
+REST:     Client → NGINX → site-service ──┬→ robot-service [internal]
+                                          ├→ user-service  [internal]
+                                          └→ telemetry     [internal]
+                                                           [1 call]
+
+GraphQL:  Client → Apollo → site-service ─┬→ robot-service [1 query]
+                                          ├→ user-service  (Federation)
+                                          └→ telemetry     (DataLoader)
+```
+
+**Robot Detail: 로봇 상세**
+```
+REST:     Client → NGINX → robot-service (robot+owner)     [call 1]
+                 → NGINX → robot-service (telemetry)       [call 2]
+                 → NGINX → site-service                    [call 3]
+
+GraphQL:  Client → Apollo → robot-service ─┬→ user-service  [1 query]
+                                           ├→ site-service  (Federation)
+                                           └→ telemetry
+```
+
+#### REST vs GraphQL 차이점
+
+| 구분 | REST | GraphQL |
+|------|------|---------|
+| 서비스 조합 | 클라이언트가 직접 여러 번 호출 | Apollo Router가 자동 조합 |
+| N+1 문제 | batch endpoint로 해결 | DataLoader로 자동 해결 |
+| Over-fetching | 모든 필드 반환 | 필요한 필드만 선택 |
+| 네트워크 호출 | 시나리오당 1~3회 | 항상 1회 |
+
 **종료:**
 ```bash
 ./scripts/stop-loadtest.sh
