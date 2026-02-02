@@ -21,6 +21,12 @@ RESPONSE_TIME = Histogram(
     buckets=[10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000]
 )
 
+RESPONSE_LENGTH = Counter(
+    'locust_response_length_total',
+    'Total response length in bytes',
+    ['method', 'name']
+)
+
 USERS = Gauge(
     'locust_users',
     'Current number of users'
@@ -30,6 +36,11 @@ FAILURES_TOTAL = Counter(
     'locust_failures_total',
     'Total number of failures',
     ['method', 'name', 'exception']
+)
+
+RPS = Gauge(
+    'locust_rps',
+    'Current requests per second'
 )
 
 # Track if server is started
@@ -62,6 +73,10 @@ def on_request(request_type, name, response_time, response_length, response, con
         REQUESTS_TOTAL.labels(method=request_type, name=name, result='success').inc()
 
     RESPONSE_TIME.labels(method=request_type, name=name).observe(response_time)
+
+    # Track response size (bytes transferred)
+    if response_length:
+        RESPONSE_LENGTH.labels(method=request_type, name=name).inc(response_length)
 
 
 @events.spawning_complete.add_listener

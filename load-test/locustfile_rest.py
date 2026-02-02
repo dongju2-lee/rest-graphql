@@ -3,6 +3,10 @@ Locust load test for REST API (NGINX Gateway)
 
 Test scenarios for REST vs GraphQL performance comparison.
 Run with: locust -f locustfile_rest.py --host=http://localhost:24000
+
+Architecture: Microservice-style with internal service orchestration.
+Each API call is a single HTTP request - services call each other internally,
+similar to how GraphQL Federation works.
 """
 
 from locust import HttpUser, task, between
@@ -32,16 +36,17 @@ class RestUser(HttpUser):
     @task(2)
     def get_user_with_robots(self):
         """
-        Scenario 2: Cross-service join
-        REST disadvantage: Multiple sequential requests
+        Scenario 2: Cross-service join (1-hop dependency)
+        Microservice orchestration: user-service internally calls robot-service
+
+        REST: Client → user-service → robot-service (internal)  [1 call]
+        GraphQL: Client → Apollo → user-service + robot-service  [1 query]
         """
         user_id = random.randint(1, 100)
-
-        # 1. Get user
-        self.client.get(f"/api/users/{user_id}", name="API-2a: Get user")
-
-        # 2. Get user's robots
-        self.client.get(f"/api/robots/by-owner/{user_id}", name="API-2b: Get robots by owner")
+        self.client.get(
+            f"/api/users/{user_id}/with-robots",
+            name="API-2: User + robots"
+        )
 
     # ============== API-3: N+1 Problem Test ==============
 
@@ -49,22 +54,15 @@ class RestUser(HttpUser):
     def get_robots_with_telemetry(self):
         """
         Scenario 3: N+1 problem test with telemetry
-        REST approach: Batch endpoint for optimization
-        GraphQL equivalent: robots { id name status telemetry { cpu memory temperature } }
+        Microservice orchestration: robot-service returns embedded telemetry
+
+        REST: Client → robot-service (robots + telemetry combined)  [1 call]
+        GraphQL: Client → Apollo → robot-service (DataLoader batched)  [1 query]
         """
-        # Get all robots
-        robots_response = self.client.get("/api/robots", name="API-3a: Get robots")
-
-        if robots_response.status_code == 200:
-            robots = robots_response.json()
-            robot_ids = [str(r["id"]) for r in robots]
-
-            if robot_ids:
-                # Batch telemetry call for ALL robots (same as GraphQL)
-                self.client.get(
-                    f"/api/telemetry/batch?ids={','.join(robot_ids)}",
-                    name="API-3b: Batch telemetry (all)"
-                )
+        self.client.get(
+            "/api/robots/with-telemetry",
+            name="API-3: N+1 (robots+telemetry)"
+        )
 
     # ============== API-4: Complex Aggregation (Dashboard) ==============
 
@@ -72,7 +70,10 @@ class RestUser(HttpUser):
     def site_dashboard(self):
         """
         Scenario 4: Complex aggregation (Site Dashboard)
-        REST approach: Single optimized endpoint with internal orchestration
+        Microservice orchestration: site-service calls robot/user/telemetry internally
+
+        REST: Client → site-service → robot/user/telemetry (internal)  [1 call]
+        GraphQL: Client → Apollo → site/robot/user (Federation)  [1 query]
         """
         site_id = random.randint(1, 5)
         self.client.get(
@@ -86,28 +87,13 @@ class RestUser(HttpUser):
     def get_single_robot_detail(self):
         """
         Single robot with all relations (cross-service)
-        GraphQL equivalent: robot { id name model status battery owner { name email } site { name location } telemetry { cpu memory disk temperature } }
-        REST requires 3 calls to get same data
+        Microservice orchestration: robot-service calls user/site internally
+
+        REST: Client → robot-service → user + site (parallel internal)  [1 call]
+        GraphQL: Client → Apollo → robot/user/site/telemetry (Federation)  [1 query]
         """
         robot_id = random.randint(1, 500)
-
-        # 1. Get robot + owner
-        robot_response = self.client.get(
-            f"/api/robots/{robot_id}/with-owner",
-            name="Robot detail: robot+owner"
-        )
-
-        # 2. Get telemetry
         self.client.get(
-            f"/api/telemetry/{robot_id}",
-            name="Robot detail: telemetry"
+            f"/api/robots/{robot_id}/full",
+            name="Robot detail (full)"
         )
-
-        # 3. Get site (site_id is in robot response)
-        if robot_response.status_code == 200:
-            site_id = robot_response.json().get("site_id", 1)
-            self.client.get(
-                f"/api/sites/{site_id}",
-                name="Robot detail: site"
-            )
-

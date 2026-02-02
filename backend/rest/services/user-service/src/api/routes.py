@@ -2,9 +2,11 @@
 
 from typing import List, Optional
 from fastapi import APIRouter, HTTPException, Query
+import httpx
 
 from models.user import UserModel
 from data.repository import UserRepository
+from core.config import get_settings
 
 
 # Create router
@@ -104,3 +106,44 @@ async def get_user(user_id: int):
         raise HTTPException(status_code=404, detail=f"User {user_id} not found")
 
     return user_data
+
+
+@router.get("/users/{user_id}/with-robots")
+async def get_user_with_robots(user_id: int):
+    """
+    Get user with their robots (microservice orchestration)
+
+    This endpoint internally calls robot-service to fetch robots,
+    similar to how GraphQL Federation resolves cross-service joins.
+
+    Args:
+        user_id: User ID
+
+    Returns:
+        User data with embedded robots list
+    """
+    repository = get_repository()
+    settings = get_settings()
+
+    # Get user
+    user_data = await repository.get_by_id(user_id)
+    if not user_data:
+        raise HTTPException(status_code=404, detail=f"User {user_id} not found")
+
+    # Internal call to robot-service (microservice pattern)
+    async with httpx.AsyncClient() as client:
+        try:
+            robots_response = await client.get(
+                f"{settings.robot_service_url}/robots/by-owner/{user_id}",
+                timeout=5.0
+            )
+            robots_response.raise_for_status()
+            robots = robots_response.json()
+        except httpx.RequestError as e:
+            raise HTTPException(status_code=503, detail=f"Robot service unavailable: {str(e)}")
+
+    # Return combined result
+    return {
+        **user_data,
+        "robots": robots
+    }

@@ -23,6 +23,7 @@ class Settings(BaseSettings):
 
     # Cross-service URLs
     user_service_url: str = "http://rest-user-service:8000"
+    site_service_url: str = "http://rest-site-service:8002"
     
     cors_origins: list[str] = ["*"]
     

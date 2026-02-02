@@ -106,8 +106,8 @@ services:
       - monitoring-network
     deploy:
       resources:
-        limits: { cpus: "1.0", memory: 1G }
-        reservations: { cpus: "0.5", memory: 512M }
+        limits: { cpus: "1.0", memory: 512M }
+        reservations: { cpus: "0.5", memory: 256M }
 
   # ============================================
   # REST Services (4 containers)
@@ -202,8 +202,8 @@ services:
       - monitoring-network
     deploy:
       resources:
-        limits: { cpus: "0.3", memory: 128M }
-        reservations: { cpus: "0.15", memory: 64M }
+        limits: { cpus: "1.0", memory: 512M }
+        reservations: { cpus: "0.5", memory: 256M }
 
   # ============================================
   # Monitoring Stack (3 containers)

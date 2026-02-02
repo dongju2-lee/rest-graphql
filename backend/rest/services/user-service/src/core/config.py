@@ -18,7 +18,10 @@ class Settings(BaseSettings):
     
     # Data Configuration
     num_users: int = 100
-    
+
+    # Service URLs (for internal service-to-service calls)
+    robot_service_url: str = "http://rest-robot-service:8001"
+
     # Latency Simulation (seconds)
     latency_user_list: float = 0.010  # 10ms
     latency_user_single: float = 0.005  # 5ms

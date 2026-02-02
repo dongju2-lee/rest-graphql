@@ -1,6 +1,7 @@
 """REST API routes for Robot Service"""
 
 from typing import List, Optional
+import asyncio
 from fastapi import APIRouter, HTTPException, Query
 import httpx
 
@@ -72,6 +73,38 @@ async def get_robots_by_site(site_id: int):
     return robots_data
 
 
+# ============== Microservice Orchestration Endpoints ==============
+# NOTE: These must be defined BEFORE /robots/{robot_id} to avoid route conflicts
+
+@router.get("/robots/with-telemetry")
+async def get_robots_with_telemetry():
+    """
+    Get all robots with embedded telemetry (microservice orchestration)
+
+    This endpoint returns robots with telemetry in a single call,
+    similar to how GraphQL resolves N+1 with DataLoader.
+    """
+    robot_repository = get_repository()
+    telemetry_repository = get_telemetry_repository()
+
+    # Get all robots and telemetry
+    robots = await robot_repository.get_all()
+    all_telemetry = await telemetry_repository.get_all()
+
+    # Create telemetry map for efficient lookup
+    telemetry_map = {t["robot_id"]: t for t in all_telemetry}
+
+    # Combine robots with telemetry
+    result = []
+    for robot in robots:
+        result.append({
+            **robot,
+            "telemetry": telemetry_map.get(robot["id"])
+        })
+
+    return result
+
+
 @router.get("/robots/{robot_id}/with-owner")
 async def get_robot_with_owner(robot_id: int):
     """
@@ -113,6 +146,63 @@ async def get_robot(robot_id: int):
         raise HTTPException(status_code=404, detail=f"Robot {robot_id} not found")
 
     return robot_data
+
+
+@router.get("/robots/{robot_id}/full")
+async def get_robot_full(robot_id: int):
+    """
+    Get robot with all related data (owner + site + telemetry)
+
+    This endpoint internally orchestrates calls to:
+    - user-service: get owner info
+    - site-service: get site info
+    - local telemetry: get telemetry data
+
+    Similar to how GraphQL Federation resolves nested relations.
+    """
+    robot_repository = get_repository()
+    telemetry_repository = get_telemetry_repository()
+    settings = get_settings()
+
+    # Get robot
+    robot_data = await robot_repository.get_by_id(robot_id)
+    if not robot_data:
+        raise HTTPException(status_code=404, detail=f"Robot {robot_id} not found")
+
+    # Get telemetry locally
+    telemetry = await telemetry_repository.get_by_robot_id(robot_id)
+
+    # Parallel calls to user-service and site-service
+    async with httpx.AsyncClient() as client:
+        owner_task = client.get(
+            f"{settings.user_service_url}/users/{robot_data['owner_id']}",
+            timeout=5.0
+        )
+        site_task = client.get(
+            f"{settings.site_service_url}/sites/{robot_data['site_id']}",
+            timeout=5.0
+        )
+
+        # Execute in parallel
+        owner_response, site_response = await asyncio.gather(
+            owner_task, site_task, return_exceptions=True
+        )
+
+        # Parse responses
+        owner = None
+        if not isinstance(owner_response, Exception) and owner_response.status_code == 200:
+            owner = owner_response.json()
+
+        site = None
+        if not isinstance(site_response, Exception) and site_response.status_code == 200:
+            site = site_response.json()
+
+    return {
+        **robot_data,
+        "owner": owner,
+        "site": site,
+        "telemetry": telemetry
+    }
 
 
 # ============== Telemetry Endpoints ==============

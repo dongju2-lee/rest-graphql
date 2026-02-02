@@ -8,12 +8,13 @@
 
 ### 핵심 비교 포인트
 
-| 구분 | REST | GraphQL |
-|------|------|---------|
+| 구분 | REST (Microservice) | GraphQL (Federation) |
+|------|---------------------|----------------------|
 | Over-fetching | 모든 필드 반환 | 요청된 필드만 반환 |
-| Cross-service Join | 클라이언트가 여러 번 호출 | 단일 쿼리로 자동 조합 |
-| N+1 문제 | batch endpoint로 수동 해결 | DataLoader로 자동 해결 |
-| 네트워크 호출 | 시나리오당 1~3회 | 항상 1회 |
+| Cross-service Join | 서비스가 내부적으로 다른 서비스 호출 | Apollo Router가 자동 조합 |
+| N+1 문제 | 서비스 내부에서 배치 처리 | DataLoader로 자동 해결 |
+| 네트워크 호출 | **항상 1회** (서비스 내부 오케스트레이션) | 항상 1회 |
+| 내부 통신 | httpx async client | Federation subgraph 호출 |
 
 ### 데이터 모델
 
@@ -50,7 +51,7 @@ User: 100명 | Robot: 500대 | Site: 5개 | Telemetry: 500개 (로봇당 1개)
 |------|---------|------|
 | Framework | FastAPI + Strawberry | FastAPI |
 | Gateway | Apollo Router (Federation 2.0) | NGINX |
-| 최적화 | DataLoader (자동 배치) | Batch endpoint (수동) |
+| 최적화 | DataLoader (자동 배치) | 내부 오케스트레이션 (httpx) |
 | 모니터링 | Prometheus + Grafana + cAdvisor |
 | 부하 테스트 | Locust + Prometheus metrics |
 
@@ -149,39 +150,62 @@ http://localhost:33000/d/container-metrics
 | 시나리오 | 설명 | 비율 | GraphQL | REST |
 |----------|------|------|---------|------|
 | API-1 | 사용자 목록 조회 | 37.5% | 1 query | 1 call |
-| API-2 | 사용자 + 로봇 조회 | 25% | 1 query | 2 calls |
-| API-3 | 전체 로봇 + Telemetry | 12.5% | 1 query | 2 calls |
+| API-2 | 사용자 + 로봇 조회 | 25% | 1 query | 1 call |
+| API-3 | 전체 로봇 + Telemetry | 12.5% | 1 query | 1 call |
 | API-4 | 사이트 대시보드 | 12.5% | 1 query | 1 call |
-| Robot Detail | 로봇 + owner + site + telemetry | 12.5% | 1 query | 3 calls |
+| Robot Detail | 로봇 + owner + site + telemetry | 12.5% | 1 query | 1 call |
 
-**핵심:** 동일한 데이터를 가져오지만 REST는 더 많은 HTTP 호출 필요
+**핵심:** 모든 시나리오에서 클라이언트는 1번만 호출. 서비스가 내부적으로 다른 서비스 호출 (마이크로서비스 오케스트레이션)
 
 ### API별 호출 흐름
 
 **API-1: 사용자 목록**
 ```
-REST:     Client → NGINX → user-service                    [1 call]
-GraphQL:  Client → Apollo → user-service                   [1 query]
+REST:     Client → NGINX → user-service                         [1 call]
+GraphQL:  Client → Apollo → user-service                        [1 query]
 ```
 
 **API-2: 사용자 + 로봇**
 ```
-REST:     Client → NGINX → user-service                    [call 1]
-                 → NGINX → robot-service                   [call 2]
+REST:     Client → NGINX → user-service → robot-service         [1 call]
+                                          (internal httpx call)
 
-GraphQL:  Client → Apollo → user-service ─┐                [1 query]
+GraphQL:  Client → Apollo → user-service ─┐                     [1 query]
                           → robot-service ◄┘ (Federation)
+```
+
+**API-3: 로봇 + Telemetry**
+```
+REST:     Client → NGINX → robot-service                        [1 call]
+                           (robots + telemetry combined)
+
+GraphQL:  Client → Apollo → robot-service                       [1 query]
+                            (DataLoader batched)
 ```
 
 **API-4: 사이트 대시보드**
 ```
-REST:     Client → NGINX → site-service ──┬→ robot-service [internal]
-                                          ├→ user-service  [internal]
-                                          └→ telemetry     [internal]
+REST:     Client → NGINX → site-service ──┬→ robot-service      [1 call]
+                                          ├→ user-service
+                                          └→ telemetry
+                                          (internal httpx calls)
 
-GraphQL:  Client → Apollo → site-service ─┬→ robot-service [1 query]
-                                          ├→ user-service  (Federation)
-                                          └→ telemetry     (DataLoader)
+GraphQL:  Client → Apollo → site-service ─┬→ robot-service      [1 query]
+                                          ├→ user-service
+                                          └→ telemetry
+                                          (Federation + DataLoader)
+```
+
+**Robot Detail: 로봇 상세**
+```
+REST:     Client → NGINX → robot-service ─┬→ user-service       [1 call]
+                                          └→ site-service
+                                          (parallel internal calls)
+
+GraphQL:  Client → Apollo → robot-service ─┬→ user-service      [1 query]
+                                           ├→ site-service
+                                           └→ telemetry
+                                           (Federation)
 ```
 
 ---
@@ -245,7 +269,7 @@ graph-rest-preform/
 │  User  Robot  Site        │                   │  User  Robot  Site        │
 │  8100  8101   8102        │                   │ 28000 28001  28002        │
 │                           │                   │                           │
-│  (Federation + DataLoader)│                   │  (Independent + Batch)    │
+│  (Federation + DataLoader)│                   │  (Microservice + httpx)   │
 └───────────────────────────┘                   └───────────────────────────┘
         ▲                                                       ▲
         │                                                       │
@@ -305,21 +329,17 @@ query {
 # API-1: 사용자 목록
 curl http://localhost:24000/api/users
 
-# API-2: 사용자 + 로봇 (2번 호출)
-curl http://localhost:24000/api/users/1
-curl http://localhost:24000/api/robots/by-owner/1
+# API-2: 사용자 + 로봇 (1번 호출, 서비스 내부 오케스트레이션)
+curl http://localhost:24000/api/users/1/with-robots
 
-# API-3: 로봇 + Telemetry (2번 호출)
-curl http://localhost:24000/api/robots
-curl "http://localhost:24000/api/telemetry/batch?ids=1,2,3,4,5"
+# API-3: 로봇 + Telemetry (1번 호출, 내부 조합)
+curl http://localhost:24000/api/robots/with-telemetry
 
 # API-4: 사이트 대시보드 (1번 호출, 내부 조합)
 curl http://localhost:24000/api/sites/1/dashboard
 
-# Robot Detail (3번 호출)
-curl http://localhost:24000/api/robots/1/with-owner
-curl http://localhost:24000/api/telemetry/1
-curl http://localhost:24000/api/sites/1
+# Robot Detail (1번 호출, 서비스 내부 오케스트레이션)
+curl http://localhost:24000/api/robots/1/full
 ```
 
 ---
