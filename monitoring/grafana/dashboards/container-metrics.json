@@ -1,0 +1,46 @@
+{
+  "dashboard": {
+    "title": "Container Metrics - REST vs GraphQL",
+    "tags": ["docker", "containers", "performance"],
+    "timezone": "browser",
+    "panels": [
+      {
+        "title": "CPU Usage by Container",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+        "targets": [
+          {
+            "expr": "rate(container_cpu_usage_seconds_total{name=~\".*-service|.*-gateway|.*-router\"}[1m]) * 100",
+            "legendFormat": "{{name}}"
+          }
+        ]
+      },
+      {
+        "title": "Memory Usage by Container",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+        "targets": [
+          {
+            "expr": "container_memory_usage_bytes{name=~\".*-service|.*-gateway|.*-router\"} / 1024 / 1024",
+            "legendFormat": "{{name}}"
+          }
+        ]
+      },
+      {
+        "title": "Network I/O",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 8},
+        "targets": [
+          {
+            "expr": "rate(container_network_receive_bytes_total{name=~\".*-service|.*-gateway|.*-router\"}[1m])",
+            "legendFormat": "{{name}} - RX"
+          },
+          {
+            "expr": "rate(container_network_transmit_bytes_total{name=~\".*-service|.*-gateway|.*-router\"}[1m])",
+            "legendFormat": "{{name}} - TX"
+          }
+        ]
+      }
+    ]
+  }
+}

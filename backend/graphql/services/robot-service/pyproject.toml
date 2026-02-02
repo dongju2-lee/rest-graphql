@@ -1,0 +1,18 @@
+[project]
+name = "robot-service-graphql"
+version = "1.0.0"
+description = "Robot Service GraphQL Subgraph for Robot Monitoring System"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.104.0",
+    "uvicorn[standard]>=0.24.0",
+    "strawberry-graphql[fastapi]>=0.217.0",
+    "pydantic>=2.5.0",
+    "pydantic-settings>=2.1.0",
+    "httpx>=0.25.0",
+    "python-dotenv>=1.0.0",
+]
+
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
