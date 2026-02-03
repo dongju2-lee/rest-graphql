@@ -118,7 +118,7 @@ services:
       context: ./backend/rest/services/user-service
     container_name: rest-user-service
     ports:
-      - "28000:8000"  # Swagger: http://localhost:28000/docs
+      - "28000:8000" # Swagger: http://localhost:28000/docs
     networks:
       - rest-network
     deploy:
@@ -142,7 +142,7 @@ services:
       context: ./backend/rest/services/robot-service
     container_name: rest-robot-service
     ports:
-      - "28001:8001"  # Swagger: http://localhost:28001/docs
+      - "28001:8001" # Swagger: http://localhost:28001/docs
     depends_on:
       - rest-user-service
     networks:
@@ -168,7 +168,7 @@ services:
       context: ./backend/rest/services/site-service
     container_name: rest-site-service
     ports:
-      - "28002:8002"  # Swagger: http://localhost:28002/docs
+      - "28002:8002" # Swagger: http://localhost:28002/docs
     networks:
       - rest-network
     deploy:
@@ -220,6 +220,8 @@ services:
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--storage.tsdb.retention.time=3d"
+      - "--web.enable-remote-write-receiver"
+      - "--web.enable-lifecycle"
     networks:
       - monitoring-network
       - graphql-network
@@ -264,9 +266,9 @@ services:
       - /var/lib/docker/:/var/lib/docker:ro
     privileged: true
     command:
-      - '--docker_only=true'
-      - '--housekeeping_interval=10s'
-      - '--store_container_labels=true'
+      - "--docker_only=true"
+      - "--housekeeping_interval=10s"
+      - "--store_container_labels=true"
     networks:
       - monitoring-network
     deploy:
