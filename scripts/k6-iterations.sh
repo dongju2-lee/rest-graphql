@@ -41,7 +41,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-PROJECT_ROOT="/Users/idongju/dev/secret/graph-rest-preform"
+PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 # Find the test script
 SCRIPT_PATTERN="$PROJECT_ROOT/k6/case${CASE}-*.js"
@@ -60,9 +60,10 @@ echo "  VUs:        $VUS"
 echo "  Iterations: $ITERATIONS"
 echo ""
 
+K6_PROMETHEUS_RW_SERVER_URL=http://localhost:19090/api/v1/write \
+K6_PROMETHEUS_RW_TREND_STATS="p(50),p(90),p(99),avg,min,max" \
 k6 run \
   --out experimental-prometheus-rw \
-  -e K6_PROMETHEUS_RW_SERVER_URL=http://localhost:19090/api/v1/write \
   -e GATEWAY_URL=http://localhost:10000 \
   -e TEST_MODE=iterations \
   -e VUS="$VUS" \

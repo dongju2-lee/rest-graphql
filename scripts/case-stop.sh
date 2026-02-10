@@ -1,6 +1,6 @@
 #!/bin/bash
 
-PROJECT_ROOT="/Users/idongju/dev/secret/graph-rest-preform"
+PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 echo "Stopping all case services..."
 docker compose -f "$PROJECT_ROOT/docker-compose.case1.yml" down 2>/dev/null || true

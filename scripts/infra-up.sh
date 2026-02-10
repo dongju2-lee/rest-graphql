@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-PROJECT_ROOT="/Users/idongju/dev/secret/graph-rest-preform"
+PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 echo "Starting infrastructure services..."
 docker compose -f "$PROJECT_ROOT/docker-compose.base.yml" up -d

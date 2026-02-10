@@ -4,7 +4,6 @@ from typing import List, Dict, Optional, Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.service import get_all_robots, get_robot_by_id
-from shared.db.database import get_session
 from sqlalchemy import select
 from shared.db.models import Alert
 

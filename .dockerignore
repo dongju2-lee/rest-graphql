@@ -1,0 +1,10 @@
+.git/
+.claude/
+.env
+*.pyc
+__pycache__/
+k6/results/
+docs/
+*.md
+.DS_Store
+.gitignore

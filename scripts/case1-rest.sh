@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-PROJECT_ROOT="/Users/idongju/dev/secret/graph-rest-preform"
+PROJECT_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 echo "Starting Case 1: REST Gateway..."
 docker compose -f "$PROJECT_ROOT/docker-compose.case1.yml" up -d --build

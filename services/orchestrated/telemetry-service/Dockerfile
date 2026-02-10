@@ -1,6 +1,7 @@
 FROM python:3.11-slim
 
 WORKDIR /app
+ENV PYTHONPATH=/app
 
 COPY shared/ /app/shared/
 COPY services/orchestrated/telemetry-service/requirements.txt .
