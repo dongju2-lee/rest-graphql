@@ -1,0 +1,17 @@
+federation_version: =2.7.0
+
+subgraphs:
+  robot:
+    routing_url: http://robot-subgraph:10011/graphql
+    schema:
+      subgraph_url: http://robot-subgraph:10011/graphql
+
+  telemetry:
+    routing_url: http://telemetry-subgraph:10012/graphql
+    schema:
+      subgraph_url: http://telemetry-subgraph:10012/graphql
+
+  alert:
+    routing_url: http://alert-subgraph:10013/graphql
+    schema:
+      subgraph_url: http://alert-subgraph:10013/graphql

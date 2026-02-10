@@ -1,0 +1,97 @@
+services:
+  robot-service:
+    build:
+      context: .
+      dockerfile: services/data/robot-service/Dockerfile
+    ports:
+      - "10001:10001"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://fleet:fleet123@postgres:5432/robot_fleet
+    networks:
+      - fleet-net
+
+  telemetry-service:
+    build:
+      context: .
+      dockerfile: services/data/telemetry-service/Dockerfile
+    ports:
+      - "10002:10002"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://fleet:fleet123@postgres:5432/robot_fleet
+    networks:
+      - fleet-net
+
+  alert-service:
+    build:
+      context: .
+      dockerfile: services/data/alert-service/Dockerfile
+    ports:
+      - "10003:10003"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://fleet:fleet123@postgres:5432/robot_fleet
+    networks:
+      - fleet-net
+
+  robot-subgraph:
+    build:
+      context: .
+      dockerfile: gateways/apollo-federation/robot-subgraph/Dockerfile
+    ports:
+      - "10011:10011"
+    environment:
+      ROBOT_SERVICE_URL: http://robot-service:10001
+    depends_on:
+      - robot-service
+    networks:
+      - fleet-net
+
+  telemetry-subgraph:
+    build:
+      context: .
+      dockerfile: gateways/apollo-federation/telemetry-subgraph/Dockerfile
+    ports:
+      - "10012:10012"
+    environment:
+      TELEMETRY_SERVICE_URL: http://telemetry-service:10002
+    depends_on:
+      - telemetry-service
+    networks:
+      - fleet-net
+
+  alert-subgraph:
+    build:
+      context: .
+      dockerfile: gateways/apollo-federation/alert-subgraph/Dockerfile
+    ports:
+      - "10013:10013"
+    environment:
+      ALERT_SERVICE_URL: http://alert-service:10003
+    depends_on:
+      - alert-service
+    networks:
+      - fleet-net
+
+  apollo-router:
+    image: ghcr.io/apollographql/router:v1.57.1
+    ports:
+      - "10000:10000"
+    volumes:
+      - ./gateways/apollo-federation/router/router.yaml:/dist/config/router.yaml:ro
+      - ./gateways/apollo-federation/router/supergraph.graphql:/dist/config/supergraph.graphql:ro
+    command:
+      - "--config"
+      - "/dist/config/router.yaml"
+      - "--supergraph"
+      - "/dist/config/supergraph.graphql"
+      - "--listen"
+      - "0.0.0.0:10000"
+    depends_on:
+      - robot-subgraph
+      - telemetry-subgraph
+      - alert-subgraph
+    networks:
+      - fleet-net
+
+networks:
+  fleet-net:
+    external: true

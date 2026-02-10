@@ -1,0 +1,54 @@
+services:
+  robot-service:
+    build:
+      context: .
+      dockerfile: services/data/robot-service/Dockerfile
+    ports:
+      - "10001:10001"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://fleet:fleet123@postgres:5432/robot_fleet
+    networks:
+      - fleet-net
+
+  telemetry-service:
+    build:
+      context: .
+      dockerfile: services/data/telemetry-service/Dockerfile
+    ports:
+      - "10002:10002"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://fleet:fleet123@postgres:5432/robot_fleet
+    networks:
+      - fleet-net
+
+  alert-service:
+    build:
+      context: .
+      dockerfile: services/data/alert-service/Dockerfile
+    ports:
+      - "10003:10003"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://fleet:fleet123@postgres:5432/robot_fleet
+    networks:
+      - fleet-net
+
+  strawberry-gateway:
+    build:
+      context: .
+      dockerfile: gateways/strawberry/Dockerfile
+    ports:
+      - "10000:10000"
+    environment:
+      ROBOT_SERVICE_URL: http://robot-service:10001
+      TELEMETRY_SERVICE_URL: http://telemetry-service:10002
+      ALERT_SERVICE_URL: http://alert-service:10003
+    depends_on:
+      - robot-service
+      - telemetry-service
+      - alert-service
+    networks:
+      - fleet-net
+
+networks:
+  fleet-net:
+    external: true

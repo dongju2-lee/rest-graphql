@@ -1,0 +1,431 @@
+{
+  "title": "K6 Performance Comparison",
+  "uid": "k6-perf",
+  "description": "REST vs GraphQL(Strawberry) vs Apollo Federation 성능 비교 대시보드. 각 case별 k6 부하 테스트 결과와 컨테이너 리소스 사용량을 한눈에 비교합니다. testid 라벨로 case를 구분하며, 시간대를 맞춰 비교하세요.",
+  "timezone": "browser",
+  "schemaVersion": 16,
+  "version": 6,
+  "refresh": "5s",
+  "panels": [
+    {
+      "id": 100,
+      "title": "k6 Performance Metrics",
+      "type": "row",
+      "gridPos": {"x": 0, "y": 0, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 1,
+      "title": "Requests Per Second (RPS)",
+      "description": "초당 처리된 HTTP 요청 수 (30초 이동평균).\n\n각 case의 처리량(throughput)을 비교하는 핵심 지표입니다.\n- 높을수록 좋음\n- case1은 REST, case2는 Strawberry GraphQL, case3은 Apollo Federation\n- 같은 VU 수에서 RPS가 높다 = 응답이 빨라서 더 많은 요청을 보낼 수 있었다는 뜻",
+      "type": "timeseries",
+      "gridPos": {"x": 0, "y": 1, "w": 12, "h": 8},
+      "targets": [
+        {
+          "expr": "sum by (testid) (rate(k6_http_reqs_total[30s]))",
+          "legendFormat": "{{testid}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "reqps" }
+      }
+    },
+    {
+      "id": 2,
+      "title": "Response Time P99",
+      "description": "HTTP 응답 시간의 99번째 백분위수 (ms).\n\n전체 요청 중 99%가 이 시간 이내에 응답했다는 의미입니다.\n- 낮을수록 좋음\n- P99가 높으면 일부 요청이 매우 느리다는 뜻 (tail latency)\n- avg보다 P99를 봐야 실제 사용자 체감 성능에 가까움\n- case간 P99 차이가 크면 아키텍처의 안정성 차이를 나타냄",
+      "type": "timeseries",
+      "gridPos": {"x": 12, "y": 1, "w": 12, "h": 8},
+      "targets": [
+        {
+          "expr": "avg by (testid) (k6_http_req_duration_p99)",
+          "legendFormat": "{{testid}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "ms" }
+      }
+    },
+    {
+      "id": 3,
+      "title": "Iteration Duration P99",
+      "description": "k6 반복(iteration) 1회 완료까지 걸린 시간의 P99 (ms).\n\n하나의 iteration = 시나리오 1회 실행 (fleet_dashboard, robot_monitor, critical_alerts 중 하나).\n- Response Time과 비슷하지만, k6 내부 처리 시간까지 포함\n- 이 값이 Response Time보다 크게 높으면 클라이언트 측 오버헤드가 있다는 뜻\n- 실제 사용자 관점의 end-to-end 지연시간에 가장 가까운 지표",
+      "type": "timeseries",
+      "gridPos": {"x": 0, "y": 9, "w": 12, "h": 8},
+      "targets": [
+        {
+          "expr": "avg by (testid) (k6_iteration_duration_p99)",
+          "legendFormat": "{{testid}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "ms" }
+      }
+    },
+    {
+      "id": 4,
+      "title": "Total Requests",
+      "description": "테스트 기간 동안 발생한 총 HTTP 요청 수.\n\n같은 시간(duration) 동안 얼마나 많은 요청을 처리했는지 보여줍니다.\n- RPS의 누적값\n- 같은 조건(VU, duration)에서 이 수치가 높을수록 처리량이 좋다는 뜻",
+      "type": "stat",
+      "gridPos": {"x": 12, "y": 9, "w": 6, "h": 4},
+      "targets": [
+        {
+          "expr": "sum by (testid) (k6_http_reqs_total)",
+          "legendFormat": "{{testid}}",
+          "refId": "A"
+        }
+      ],
+      "options": { "graphMode": "none", "colorMode": "value" }
+    },
+    {
+      "id": 5,
+      "title": "Error Rate",
+      "description": "HTTP 요청 실패율 (0 = 0%, 1 = 100%).\n\n성능 테스트에서 에러가 발생하면 결과 자체가 무효이므로 반드시 확인해야 합니다.\n- 초록(0~5%): 정상\n- 노랑(5~10%): 주의 필요\n- 빨강(10%+): 테스트 결과 신뢰 불가\n- 에러율이 높은 상태에서의 RPS/응답시간은 의미 없음",
+      "type": "gauge",
+      "gridPos": {"x": 18, "y": 9, "w": 6, "h": 4},
+      "targets": [
+        {
+          "expr": "avg by (testid) (k6_http_req_failed_rate)",
+          "legendFormat": "{{testid}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "min": 0, "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": 0, "color": "green"},
+              {"value": 0.05, "color": "yellow"},
+              {"value": 0.1, "color": "red"}
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 6,
+      "title": "Data Received Rate",
+      "description": "클라이언트(k6)가 서버로부터 수신한 데이터량 (bytes/sec, 30초 이동평균).\n\n응답 페이로드 크기의 차이를 보여줍니다.\n- GraphQL은 필요한 필드만 요청하므로 REST보다 수신량이 적을 수 있음\n- 같은 RPS에서 수신량이 적다 = 네트워크 효율이 좋다\n- over-fetching 문제를 수치로 확인할 수 있는 지표",
+      "type": "timeseries",
+      "gridPos": {"x": 12, "y": 13, "w": 12, "h": 4},
+      "targets": [
+        {
+          "expr": "sum by (testid) (rate(k6_data_received_total[30s]))",
+          "legendFormat": "{{testid}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "Bps" }
+      }
+    },
+
+    {
+      "id": 150,
+      "title": "Service Request Counts",
+      "type": "row",
+      "gridPos": {"x": 0, "y": 17, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 7,
+      "title": "k6 Client Requests (per Test)",
+      "description": "k6가 게이트웨이에 보낸 총 HTTP 요청 수.\n\n클라이언트 관점의 호출 횟수입니다.\n- 모든 case에서 동일한 VU/duration 조건이면 비슷해야 정상\n- case3(Apollo)은 응답이 빨라서 같은 시간에 더 많은 요청을 보냄\n- 이 값 자체보다는 '같은 클라이언트 요청 1건이 내부적으로 몇 건의 서비스 호출을 유발하는가'가 핵심",
+      "type": "stat",
+      "gridPos": {"x": 0, "y": 18, "w": 8, "h": 6},
+      "targets": [
+        {
+          "expr": "sum by (testid) (k6_http_reqs_total)",
+          "legendFormat": "{{testid}}",
+          "refId": "A"
+        }
+      ],
+      "options": { "graphMode": "none", "colorMode": "value", "textMode": "value_and_name" },
+      "fieldConfig": {
+        "defaults": { "unit": "short" }
+      }
+    },
+    {
+      "id": 8,
+      "title": "Gateway Calls Received",
+      "description": "게이트웨이가 받은 총 요청 수 (/metrics, /health 제외).\n\n= k6가 보낸 수와 동일해야 합니다.\n- gateway job: rest-gateway(case1), strawberry-gateway(case2), apollo-router(case3)\n- 이 숫자가 k6 요청 수와 다르면 중간에 요청이 누락되거나 에러가 발생한 것",
+      "type": "stat",
+      "gridPos": {"x": 8, "y": 18, "w": 8, "h": 6},
+      "targets": [
+        {
+          "expr": "sum by (instance) (increase(http_requests_total{job=\"gateway\",handler!~\"/metrics|/health.*\"}[$__range]))",
+          "legendFormat": "{{instance}}",
+          "refId": "A"
+        }
+      ],
+      "options": { "graphMode": "none", "colorMode": "value", "textMode": "value_and_name" },
+      "fieldConfig": {
+        "defaults": { "unit": "short", "decimals": 0 }
+      }
+    },
+    {
+      "id": 9,
+      "title": "Backend Service Calls Received",
+      "description": "백엔드 서비스들이 받은 총 요청 수 (/metrics, /health 제외).\n\nN+1 문제를 수치로 확인하는 핵심 패널입니다.\n- case1(REST): gateway 1건 → robot-service 1건 → telemetry 15건 + alert 15건 = 31건 내부 호출\n- case2(Strawberry): DataLoader가 배치 처리하므로 내부 호출 훨씬 적음\n- case3(Apollo): subgraph가 data서비스를 호출, Federation이 최적화\n\n숫자가 클수록 내부 통신 오버헤드가 크다는 뜻",
+      "type": "stat",
+      "gridPos": {"x": 16, "y": 18, "w": 8, "h": 6},
+      "targets": [
+        {
+          "expr": "sum by (job) (increase(http_requests_total{job=~\"robot-service|telemetry-service|alert-service\",handler!~\"/metrics|/health.*\"}[$__range]))",
+          "legendFormat": "{{job}}",
+          "refId": "A"
+        }
+      ],
+      "options": { "graphMode": "none", "colorMode": "value", "textMode": "value_and_name" },
+      "fieldConfig": {
+        "defaults": { "unit": "short", "decimals": 0 }
+      }
+    },
+    {
+      "id": 13,
+      "title": "Service Call Rate (per Second)",
+      "description": "각 서비스가 초당 받는 요청 수 (30초 이동평균, /metrics /health 제외).\n\n시간축으로 서비스별 부하를 실시간 비교합니다.\n- k6 테스트 중에만 값이 올라감\n- case1에서 telemetry/alert 서비스의 rate가 gateway보다 15배 높으면 N+1 문제 확인\n- case2/3에서는 서비스간 rate가 비교적 균일해야 정상",
+      "type": "timeseries",
+      "gridPos": {"x": 0, "y": 24, "w": 24, "h": 8},
+      "targets": [
+        {
+          "expr": "sum by (job, handler) (rate(http_requests_total{handler!~\"/metrics|/health.*\"}[30s]))",
+          "legendFormat": "{{job}} {{handler}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "reqps", "min": 0 }
+      }
+    },
+
+    {
+      "id": 500,
+      "title": "Performance Analysis",
+      "type": "row",
+      "gridPos": {"x": 0, "y": 32, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 40,
+      "title": "Response Time Percentiles (P50 / P90 / P99)",
+      "description": "응답시간 백분위수 비교 (P50, P90, P99).\n\n응답 시간의 분포를 보여줍니다.\n- P50(중앙값): 전체의 절반이 이 시간 이내 → '보통 유저'의 체감 속도\n- P90: 상위 10%를 제외한 대부분의 체감 속도\n- P99: 최악에 가까운 체감 속도 (tail latency)\n- P50과 P99 차이가 크면 응답시간 편차가 심함 → 불안정한 아키텍처\n- P50과 P99가 비슷하면 일관된 성능 → 안정적 아키텍처\n\nk6 실행 시 K6_PROMETHEUS_RW_TREND_STATS에 p(50),p(90) 추가 필요",
+      "type": "timeseries",
+      "gridPos": {"x": 0, "y": 33, "w": 12, "h": 8},
+      "targets": [
+        {
+          "expr": "avg by (testid) (k6_http_req_duration_p50)",
+          "legendFormat": "{{testid}} P50",
+          "refId": "A"
+        },
+        {
+          "expr": "avg by (testid) (k6_http_req_duration_p90)",
+          "legendFormat": "{{testid}} P90",
+          "refId": "B"
+        },
+        {
+          "expr": "avg by (testid) (k6_http_req_duration_p99)",
+          "legendFormat": "{{testid}} P99",
+          "refId": "C"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "ms", "min": 0 }
+      }
+    },
+    {
+      "id": 41,
+      "title": "Throughput Efficiency (RPS / CPU%)",
+      "description": "CPU 1% 당 처리할 수 있는 초당 요청 수.\n\n아키텍처 효율성을 정규화해서 비교하는 핵심 지표입니다.\n- 높을수록 CPU 대비 처리량이 좋음\n- Case3(Apollo)의 RPS가 높은 게 단순히 Rust라서인지, 아키텍처 효율 차이인지 판별\n- 이 값이 비슷하면 → 성능 차이는 언어(Rust vs Python) 때문\n- 이 값도 차이나면 → 아키텍처 자체의 효율 차이\n\n계산: sum(k6 RPS) / sum(case 전체 CPU%)",
+      "type": "timeseries",
+      "gridPos": {"x": 12, "y": 33, "w": 12, "h": 8},
+      "targets": [
+        {
+          "expr": "sum(rate(k6_http_reqs_total[30s])) / clamp_min(sum(docker_container_cpu_percent{case!=\"infra\"}), 0.01)",
+          "legendFormat": "RPS per CPU%",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "reqps", "min": 0 }
+      }
+    },
+    {
+      "id": 42,
+      "title": "Response Size per Request",
+      "description": "HTTP 요청 1건당 평균 응답 크기 (bytes).\n\nover-fetching 문제를 수치로 증명하는 패널입니다.\n- REST(case1): 모든 필드를 다 내려주므로 응답이 큼\n- GraphQL(case2/3): 클라이언트가 요청한 필드만 응답하므로 작을 수 있음\n- 값이 작을수록 네트워크 효율이 좋음\n- 모바일 환경에서는 이 차이가 UX에 직접적으로 영향",
+      "type": "timeseries",
+      "gridPos": {"x": 0, "y": 41, "w": 12, "h": 8},
+      "targets": [
+        {
+          "expr": "sum by (testid) (rate(k6_data_received_total[30s])) / clamp_min(sum by (testid) (rate(k6_http_reqs_total[30s])), 0.01)",
+          "legendFormat": "{{testid}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "bytes", "min": 0 }
+      }
+    },
+    {
+      "id": 43,
+      "title": "Call Amplification Factor",
+      "description": "클라이언트 요청 1건이 내부적으로 유발하는 서비스 호출 배수.\n\n= (전체 백엔드 호출 수) / (게이트웨이 호출 수)\n\nN+1 문제의 심각도를 단일 숫자로 표현합니다.\n- case1(REST): ~25x (gateway 1건 → 내부 약 25건)\n- case2(Strawberry): DataLoader 배치로 낮음\n- case3(Apollo): subgraph 경유로 중간 수준\n\n이 배수가 높을수록 내부 네트워크/CPU 오버헤드가 크다는 뜻\n대시보드 시간 범위를 테스트 구간에 맞추면 정확한 값이 표시됨",
+      "type": "stat",
+      "gridPos": {"x": 12, "y": 41, "w": 12, "h": 8},
+      "targets": [
+        {
+          "expr": "sum(increase(http_requests_total{job=~\"robot-service|telemetry-service|alert-service\",handler!~\"/metrics|/health.*\"}[$__range])) / clamp_min(sum(increase(http_requests_total{job=\"gateway\",handler!~\"/metrics|/health.*\"}[$__range])), 1)",
+          "legendFormat": "backend / gateway",
+          "refId": "A"
+        }
+      ],
+      "options": { "graphMode": "none", "colorMode": "value", "textMode": "value_and_name" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "suffix:x",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": 0, "color": "green"},
+              {"value": 5, "color": "yellow"},
+              {"value": 15, "color": "red"}
+            ]
+          }
+        }
+      }
+    },
+
+    {
+      "id": 200,
+      "title": "Container CPU Usage",
+      "type": "row",
+      "gridPos": {"x": 0, "y": 49, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 10,
+      "title": "CPU % per Service (by Case)",
+      "description": "각 컨테이너(서비스)별 CPU 사용률.\n\nlegend 형식: case명 / 서비스명 (예: case1-rest / robot-service)\n- 어떤 서비스가 CPU를 많이 먹는지 병목 지점을 파악\n- case1: rest-gateway + orchestrated 서비스 3개\n- case2: strawberry-gateway + data 서비스 3개\n- case3: apollo-router + subgraph 3개 + data 서비스 3개\n- 인프라 컨테이너(postgres, prometheus 등)는 제외됨",
+      "type": "timeseries",
+      "gridPos": {"x": 0, "y": 50, "w": 16, "h": 8},
+      "targets": [
+        {
+          "expr": "docker_container_cpu_percent{case!=\"infra\"}",
+          "legendFormat": "{{case}} / {{service}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "percent", "min": 0 }
+      }
+    },
+    {
+      "id": 11,
+      "title": "CPU % Total (by Case)",
+      "description": "case별 전체 컨테이너 CPU 사용률 합계.\n\n해당 case를 구성하는 모든 서비스의 CPU를 합산한 값입니다.\n- case간 총 CPU 소비량을 직접 비교\n- 같은 처리량(RPS)에서 CPU가 낮을수록 효율적\n- case3(Apollo)은 컨테이너 수가 많지만 Rust 라우터라 총합이 낮을 수 있음\n- 부하 테스트 중 피크를 확인하세요",
+      "type": "timeseries",
+      "gridPos": {"x": 16, "y": 50, "w": 8, "h": 8},
+      "targets": [
+        {
+          "expr": "sum by (case) (docker_container_cpu_percent{case!=\"infra\"})",
+          "legendFormat": "{{case}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "percent", "min": 0 }
+      }
+    },
+
+    {
+      "id": 300,
+      "title": "Container Memory Usage",
+      "type": "row",
+      "gridPos": {"x": 0, "y": 58, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 20,
+      "title": "Memory per Service (by Case)",
+      "description": "각 컨테이너(서비스)별 메모리 사용량 (bytes).\n\nlegend 형식: case명 / 서비스명\n- 메모리 누수가 있으면 시간이 지날수록 계속 증가함\n- Python 서비스는 기본 ~60MB, Apollo Router(Rust)는 ~70MB\n- 부하 테스트 중 메모리가 급증하면 GC 압박이나 캐시 이슈 의심\n- 인프라 컨테이너(postgres, prometheus 등)는 제외됨",
+      "type": "timeseries",
+      "gridPos": {"x": 0, "y": 59, "w": 16, "h": 8},
+      "targets": [
+        {
+          "expr": "docker_container_memory_usage_bytes{case!=\"infra\"}",
+          "legendFormat": "{{case}} / {{service}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "bytes", "min": 0 }
+      }
+    },
+    {
+      "id": 21,
+      "title": "Memory Total (by Case)",
+      "description": "case별 전체 컨테이너 메모리 사용량 합계.\n\n해당 case를 운영하는 데 필요한 총 메모리입니다.\n- case간 메모리 효율 직접 비교\n- case3은 컨테이너 수가 많아 총합이 클 수 있음 (7개 vs 4개)\n- 프로덕션 서버 스펙 산정 시 참고\n- 부하 전후로 메모리가 회수되는지 확인하세요",
+      "type": "timeseries",
+      "gridPos": {"x": 16, "y": 59, "w": 8, "h": 8},
+      "targets": [
+        {
+          "expr": "sum by (case) (docker_container_memory_usage_bytes{case!=\"infra\"})",
+          "legendFormat": "{{case}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "bytes", "min": 0 }
+      }
+    },
+
+    {
+      "id": 400,
+      "title": "Container Network I/O",
+      "type": "row",
+      "gridPos": {"x": 0, "y": 67, "w": 24, "h": 1},
+      "collapsed": false
+    },
+    {
+      "id": 30,
+      "title": "Network RX Rate (by Case)",
+      "description": "case별 컨테이너 네트워크 수신량 (bytes/sec, 30초 이동평균).\n\n컨테이너들이 외부(클라이언트, 다른 서비스)로부터 받은 데이터량입니다.\n- 서비스간 내부 통신량 + 클라이언트 요청량 포함\n- case1(REST)은 게이트웨이→서비스 간 HTTP 호출이 N+1로 많아 내부 통신량이 높을 수 있음\n- case3(Apollo)은 Router→Subgraph→DataService로 홉이 많지만 Rust 라우터가 효율적으로 처리",
+      "type": "timeseries",
+      "gridPos": {"x": 0, "y": 68, "w": 12, "h": 8},
+      "targets": [
+        {
+          "expr": "sum by (case) (rate(docker_container_network_rx_bytes_total{case!=\"infra\"}[30s]))",
+          "legendFormat": "{{case}} rx",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "Bps", "min": 0 }
+      }
+    },
+    {
+      "id": 31,
+      "title": "Network TX Rate (by Case)",
+      "description": "case별 컨테이너 네트워크 송신량 (bytes/sec, 30초 이동평균).\n\n컨테이너들이 외부(클라이언트, 다른 서비스)로 보낸 데이터량입니다.\n- 응답 페이로드 크기를 반영\n- GraphQL(case2, case3)은 필요한 필드만 응답하므로 REST(case1)보다 TX가 낮을 수 있음\n- RX와 TX를 함께 보면 요청 대비 응답 비율(응답이 얼마나 큰지)을 파악 가능\n- TX가 비정상적으로 높으면 불필요한 데이터를 보내고 있는 것",
+      "type": "timeseries",
+      "gridPos": {"x": 12, "y": 68, "w": 12, "h": 8},
+      "targets": [
+        {
+          "expr": "sum by (case) (rate(docker_container_network_tx_bytes_total{case!=\"infra\"}[30s]))",
+          "legendFormat": "{{case}} tx",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "Bps", "min": 0 }
+      }
+    }
+  ]
+}
