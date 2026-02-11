@@ -86,7 +86,7 @@ Client --(1 GraphQL)--> Apollo Router (:10000)
 | 추가 컴포넌트 | 없음 | 없음 | Subgraph 3개 |
 | 서비스 간 직접 호출 | Robot → Telemetry, Alert | 없음 | 없음 |
 
-**핵심**: Case 1의 마이크로서비스에는 다른 서비스를 호출하는 오케스트레이션 로직이 포함된다. 이것이 REST 마이크로서비스 아키텍처의 현실적인 패턴이며, GraphQL과의 본질적 차이점이다.
+**핵심**: Case 1의 마이크로서비스에는 다른 서비스를 호출하는 오케스트레이션 로직이 포함된다. REST도 batch 엔드포인트를 사용하면 호출 수를 줄일 수 있지만, batch 설계와 구현을 개발자가 명시적으로 해야 한다. 반면 GraphQL은 DataLoader가 이를 구조적으로 자동 처리한다. (상세 비교: Section 10.1)
 
 ---
 
@@ -223,12 +223,16 @@ N+1 문제 극대화 (15대 로봇)
 
 **내부 호출:**
 
-| | Case 1 (REST) | Case 2 (Strawberry) | Case 3 (Apollo) |
-|---|:---:|:---:|:---:|
-| Robot Service | 1번 (GET /robots) | 1번 | Subgraph→1번 |
-| Telemetry Service | **15번** (개별 호출) | **1번** (batch) | Subgraph→**1번** (batch) |
-| Alert Service | **15번** (개별 호출) | **1번** (batch) | Subgraph→**1번** (batch) |
-| 총 서비스 호출 | **31번** | **3번** | **3번** + Subgraph 3번 |
+| | Case 1 REST (naive) | Case 1 REST (batch) | Case 2 (Strawberry) | Case 3 (Apollo) |
+|---|:---:|:---:|:---:|:---:|
+| Robot Service | 1번 (GET /robots) | 1번 (GET /robots) | 1번 | Subgraph→1번 |
+| Telemetry Service | **15번** (개별 GET) | **1번** (POST /telemetry/batch) | **1번** (DataLoader) | Subgraph→**1번** (DataLoader) |
+| Alert Service | **15번** (개별 GET) | **1번** (POST /alerts/batch) | **1번** (DataLoader) | Subgraph→**1번** (DataLoader) |
+| 총 서비스 호출 | **31번** | **3번** | **3번** | **3번** + Subgraph 3번 |
+| Batch 방식 | 없음 (for loop) | 명시적 batch 엔드포인트 | DataLoader 자동 | DataLoader 자동 |
+
+> **핵심**: REST도 batch 엔드포인트(POST /telemetry/batch, POST /alerts/batch)를 사용하면 총 3번 호출로 줄일 수 있다.
+> 차이는 "가능/불가능"이 아니라 **"명시적 설계 vs 자동 배치"**이다. (아래 Section 10.1 참고)
 
 ### API 2: Robot Monitor
 
@@ -247,7 +251,16 @@ N+1 문제 극대화 (15대 로봇)
   }
 ```
 
-**내부 호출:** 모든 케이스 3번 (차이 없음)
+**내부 호출:**
+
+| | Case 1 REST | Case 2 (Strawberry) | Case 3 (Apollo) |
+|---|:---:|:---:|:---:|
+| Robot Service | 1번 (DB 조회) | 1번 | Subgraph→1번 |
+| Telemetry Service | 1번 (GET /telemetry/{id}/latest) | 1번 | Subgraph→1번 |
+| Alert Service | 1번 (GET /alerts/{id}) | 1번 | Subgraph→1번 |
+| 총 서비스 호출 | **3번** | **3번** | **3번** + Subgraph 3번 |
+
+> 1:1 관계이므로 N+1이 발생하지 않아 모든 케이스에서 호출 수 동일. batch 여부와 무관.
 
 ### API 3: Critical Alerts
 
@@ -274,12 +287,15 @@ N+1 발생 (크리티컬 알람 10건 → 각각 로봇 정보 필요)
 
 **내부 호출:**
 
-| | Case 1 (REST) | Case 2 (Strawberry) | Case 3 (Apollo) |
-|---|:---:|:---:|:---:|
-| Alert Service | 1번 | 1번 | Subgraph→1번 |
-| Robot Service | **10번** (개별) | **1번** (batch) | Subgraph→**1번** (batch) |
-| Telemetry Service | **10번** (개별) | **1번** (batch) | Subgraph→**1번** (batch) |
-| 총 서비스 호출 | **21번** | **3번** | **3번** + Subgraph 3번 |
+| | Case 1 REST (naive) | Case 1 REST (batch) | Case 2 (Strawberry) | Case 3 (Apollo) |
+|---|:---:|:---:|:---:|:---:|
+| Alert Service | 1번 (GET /alerts/critical) | 1번 (GET /alerts/critical) | 1번 | Subgraph→1번 |
+| Robot Service | **10번** (개별 DB 조회) | **1번** (POST /robots/batch) | **1번** (DataLoader) | Subgraph→**1번** (DataLoader) |
+| Telemetry Service | **10번** (개별 GET) | **1번** (POST /telemetry/batch) | **1번** (DataLoader) | Subgraph→**1번** (DataLoader) |
+| 총 서비스 호출 | **21번** | **3번** | **3번** | **3번** + Subgraph 3번 |
+| Batch 방식 | 없음 (for loop) | 명시적 batch 엔드포인트 | DataLoader 자동 | DataLoader 자동 |
+
+> Fleet Dashboard와 동일한 패턴: REST도 batch 엔드포인트를 사용하면 3번으로 줄어든다.
 
 ---
 
@@ -816,7 +832,10 @@ cleanup.sh:
 
 ## 10. Case 1 REST: Robot Service 집계 API
 
-Case 1에서만 Robot Service에 추가되는 오케스트레이션 엔드포인트:
+Case 1에서만 Robot Service에 추가되는 오케스트레이션 엔드포인트.
+**Naive(개별 호출)와 Batch(일괄 호출) 두 가지 구현을 비교한다.**
+
+### 10-A. Naive 방식 (N+1 발생) — 현재 구현
 
 ```
 GET /robots/dashboard
@@ -826,7 +845,7 @@ GET /robots/dashboard
          GET http://telemetry-service:10002/telemetry/{id}/latest   (15번)
          GET http://alert-service:10003/alerts/{id}                 (15번)
     3. 결과 조합하여 반환
-  → N+1: 30번 추가 호출
+  → N+1: 30번 추가 호출, 총 31번
 
 GET /robots/{id}/monitor
   Robot Service 내부:
@@ -834,17 +853,57 @@ GET /robots/{id}/monitor
     2. GET http://telemetry-service:10002/telemetry/{id}/latest     (1번)
     3. GET http://alert-service:10003/alerts/{id}                   (1번)
     4. 결과 조합하여 반환
-  → N+1 없음: 2번 추가 호출
+  → N+1 없음: 2번 추가 호출, 총 3번
 
 GET /robots/alerts/critical
   Robot Service 내부:
     1. GET http://alert-service:10003/alerts/critical               (1번)
     2. for each alert:
-         GET http://robot-service(자신):10001/robots/{id}           (10번, 자기 DB 조회)
+         DB에서 robot 조회                                           (10번)
          GET http://telemetry-service:10002/telemetry/{id}/latest   (10번)
     3. 결과 조합하여 반환
-  → N+1: 20번 추가 호출
+  → N+1: 20번 추가 호출, 총 21번
 ```
+
+### 10-B. Batch 방식 (N+1 제거) — REST에서도 가능
+
+```
+GET /robots/dashboard
+  Robot Service 내부:
+    1. DB에서 로봇 15대 조회                                         (1번)
+    2. robot_ids = [r.id for r in robots]
+    3. POST http://telemetry-service:10002/telemetry/batch           (1번)
+         Body: { "robot_ids": robot_ids }
+    4. POST http://alert-service:10003/alerts/batch                  (1번)
+         Body: { "robot_ids": robot_ids }
+    5. 결과 조합하여 반환
+  → Batch: 2번 추가 호출, 총 3번 ✅
+
+GET /robots/{id}/monitor
+  → 변화 없음: 1:1이라 batch 불필요, 총 3번
+
+GET /robots/alerts/critical
+  Robot Service 내부:
+    1. GET http://alert-service:10003/alerts/critical               (1번)
+    2. robot_ids = unique([a.robot_id for a in alerts])
+    3. DB에서 robots batch 조회 (WHERE id IN (...))                  (1번)
+    4. POST http://telemetry-service:10002/telemetry/batch           (1번)
+         Body: { "robot_ids": robot_ids }
+    5. 결과 조합하여 반환
+  → Batch: 2번 추가 호출, 총 3번 ✅
+```
+
+### 10-C. 호출 수 요약
+
+| API | REST naive | REST batch | GraphQL (Case 2, 3) |
+|---|:---:|:---:|:---:|
+| Fleet Dashboard | 31번 | **3번** | 3번 |
+| Robot Monitor | 3번 | 3번 | 3번 |
+| Critical Alerts | 21번 | **3번** | 3번 |
+
+> **REST도 batch하면 호출 수는 동일해진다.** 그렇다면 차이는 무엇인가? → Section 10.1 참고
+
+### REST Gateway 프록시
 
 REST Gateway는 이 집계 API를 단순 프록시:
 
@@ -853,6 +912,57 @@ GET /api/fleet/dashboard    --> http://robot-service:10001/robots/dashboard
 GET /api/robots/{id}/monitor --> http://robot-service:10001/robots/{id}/monitor
 GET /api/alerts/critical     --> http://robot-service:10001/robots/alerts/critical
 ```
+
+---
+
+## 10.1 REST Batch vs GraphQL DataLoader: 본질적 차이
+
+REST도 batch하면 호출 수가 동일해진다. 그러면 왜 GraphQL이 N+1 해결에 유리하다고 하는가?
+
+### 차이점 요약
+
+| | REST Batch | GraphQL DataLoader |
+|---|---|---|
+| Batch 구현 위치 | 오케스트레이터 (호출하는 쪽) | DataLoader (선언적) |
+| 새 집계 API 추가 시 | 매번 batch 로직 작성 | DataLoader 재사용, 자동 적용 |
+| Batch 엔드포인트 | 별도로 설계+구현 필요 | 불필요 (DataLoader가 자동 수집) |
+| 개발자 실수 가능성 | 높음 (for loop으로 쓰기 쉬움) | 낮음 (구조적으로 batch 강제) |
+| 새 필드 추가 시 | 오케스트레이터 코드 수정 필요 | 스키마에 필드 추가만 하면 됨 |
+
+### 구체적 비교: "알림에 로봇 위치 추가" 요구사항이 들어왔을 때
+
+**REST (명시적)**:
+```python
+# 1. 이미 POST /robots/batch 엔드포인트가 있어야 함 (없으면 새로 만들어야)
+# 2. orchestrator.py에서 batch 호출 코드를 직접 작성
+robot_ids = [alert.robot_id for alert in alerts]
+robots_resp = await client.post(f"{ROBOT_URL}/robots/batch", json={"ids": robot_ids})
+robots_map = {r["id"]: r for r in robots_resp.json()}
+for alert in alerts:
+    alert["robot_location"] = robots_map[alert["robot_id"]]["location"]
+```
+
+**GraphQL (자동)**:
+```python
+# 1. 스키마에 필드 하나 추가 → 끝
+@strawberry.type
+class Alert:
+    @strawberry.field
+    async def robot(self, info) -> Robot:
+        return await info.context["robot_loader"].load(self.robot_id)
+        # DataLoader가 여러 alert의 robot_id를 자동으로 모아서 1번에 조회
+```
+
+### 이 프로젝트에서의 선택
+
+이 프로젝트는 **의도적으로 Case 1에서 naive(N+1) 구현을 사용**한다.
+
+이유:
+1. **현실 반영**: 실무에서 REST 오케스트레이터를 작성할 때 for loop이 자연스럽고, batch를 놓치기 쉬움
+2. **극단적 차이 시각화**: 성능 테스트에서 N+1의 영향을 명확히 보기 위함
+3. **공정한 비교는 아님**: REST batch를 쓰면 호출 수는 동일해지므로, 이 점을 인지해야 함
+
+> **결론**: "REST는 batch를 못 한다"가 아니라, "REST는 batch를 직접 설계해야 하고, GraphQL은 DataLoader가 구조적으로 해결해준다"가 정확한 표현이다.
 
 ---
 
@@ -956,9 +1066,10 @@ k6 → POST http://localhost:10000/graphql               (Case 3)
 
 비교 포인트:
 - **같은 시간 동안 어떤 케이스가 더 많은 요청을 처리하는가?**
-- REST (Case 1): 내부 31번 호출 → 응답 느림 → 총 요청수 적음
-- Strawberry (Case 2): 내부 3번 호출 → 응답 빠름 → 총 요청수 많음
+- REST (Case 1): 내부 31번 호출 (naive, batch 미사용) → 응답 느림 → 총 요청수 적음
+- Strawberry (Case 2): 내부 3번 호출 (DataLoader 자동 batch) → 응답 빠름 → 총 요청수 많음
 - Apollo (Case 3): 내부 3번 + Subgraph 오버헤드 → Case 2보다는 약간 느릴 수 있음
+- 참고: REST도 batch 엔드포인트를 사용하면 3번으로 줄일 수 있음 (Section 10.1 참고)
 
 #### Mode 2: Iteration-based (고정 콜수)
 
@@ -979,7 +1090,7 @@ k6 → POST http://localhost:10000/graphql               (Case 3)
 
 비교 포인트:
 - **같은 요청수를 처리하는 데 어떤 케이스가 더 빠른가?**
-- REST (Case 1): 1000콜 처리에 가장 오래 걸림
+- REST (Case 1): 1000콜 처리에 가장 오래 걸림 (naive N+1 구현 기준)
 - Strawberry (Case 2): 가장 빠를 것으로 예상
 - Apollo (Case 3): Case 2보다 약간 느림 (Subgraph 오버헤드)
 
