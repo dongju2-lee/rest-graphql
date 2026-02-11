@@ -20,8 +20,8 @@ GATEWAY_CASE_MAP = {
 # Infrastructure services (excluded from case tagging)
 INFRA_SERVICES = {"postgres", "prometheus", "grafana", "docker-exporter"}
 
-# Compose project name for our project
-PROJECT_NAME = "graph-rest-preform"
+# Network name used by all project containers
+NETWORK_NAME = "fleet-net"
 
 
 class DockerSocket:
@@ -85,10 +85,10 @@ def collect_metrics():
         name = c["Names"][0].lstrip("/")
         container_labels = c.get("Labels", {})
         service = container_labels.get("com.docker.compose.service", name)
-        project = container_labels.get("com.docker.compose.project", "")
 
-        # Only export metrics for our project's containers
-        if project != PROJECT_NAME:
+        # Only export metrics for containers on our project network
+        container_networks = c.get("NetworkSettings", {}).get("Networks", {})
+        if NETWORK_NAME not in container_networks:
             continue
 
         # Tag with case label: infra containers get "infra", others get the detected case
