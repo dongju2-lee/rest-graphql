@@ -2,7 +2,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from shared.db.models import Robot
 from shared.schemas.robot import RobotResponse
-from typing import List, Optional
+from typing import Dict, List, Optional
 
 
 async def get_all_robots(session: AsyncSession) -> List[RobotResponse]:
@@ -52,3 +52,29 @@ async def get_robot_by_id(session: AsyncSession, robot_id: str) -> Optional[Robo
         location=robot.location,
         status=robot.status,
     )
+
+
+async def get_robots_by_ids(session: AsyncSession, robot_ids: List[str]) -> Dict[str, RobotResponse]:
+    """
+    Fetch multiple robots by IDs in a single query (batch).
+
+    Args:
+        robot_ids: List of robot identifiers
+
+    Returns:
+        Dictionary mapping robot_id to RobotResponse
+    """
+    stmt = select(Robot).where(Robot.id.in_(robot_ids))
+    result = await session.execute(stmt)
+    robots = result.scalars().all()
+
+    return {
+        robot.id: RobotResponse(
+            id=robot.id,
+            name=robot.name,
+            model=robot.model,
+            location=robot.location,
+            status=robot.status,
+        )
+        for robot in robots
+    }
